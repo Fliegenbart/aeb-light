@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AEB Readiness Snapshot",
-  description: "A lightweight mock readiness check for AEB-ready handover preparation.",
+  title: "AEB Consultant Toolkit",
+  description: "A mock Pre-AEB readiness workbench for consultant-led customer data workshops.",
   icons: {
     icon: "/favicon.svg",
   },

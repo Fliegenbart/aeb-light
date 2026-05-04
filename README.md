@@ -1,6 +1,8 @@
-# AEB Readiness Snapshot
+# AEB Consultant Toolkit
 
-Lightweight one-page prototype for a mock AEB-ready shipment handover readiness check.
+Lightweight one-page prototype for a mock Pre-AEB readiness workbench.
+
+The concept is an AEB consultant toolkit: consultants can use static workshop cases and deterministic rules to show a customer which shipment, broker and compliance data is already usable, which target workflows are blocked, and what should go into a customer handover note.
 
 ## Run locally
 
