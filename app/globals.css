@@ -50,3 +50,24 @@ textarea {
     transition-duration: 180ms;
   }
 }
+
+@media print {
+  body {
+    background: #ffffff;
+    color: #101820;
+  }
+
+  aside,
+  button {
+    display: none !important;
+  }
+
+  main {
+    background: #ffffff !important;
+  }
+
+  .print-panel {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+}

@@ -4,9 +4,13 @@ import { useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  BriefcaseBusiness,
   CheckCircle2,
+  ClipboardCheck,
+  Copy,
   FileText,
   Gauge,
+  Printer,
   RefreshCcw,
   ScanSearch,
   ShieldAlert,
@@ -50,11 +54,67 @@ const severityTone = {
 };
 
 const consultantSteps = [
-  "Collect messy shipment context",
-  "Spot data gaps and contradictions",
-  "Align target workflow readiness",
-  "Hand over a clean action note",
+  "Open customer case",
+  "Run readiness check",
+  "Review report preview",
+  "Share handover note",
 ];
+
+type CaseBrief = {
+  accountName: string;
+  region: string;
+  projectPhase: string;
+  consultantOwner: string;
+  targetWorkstream: string;
+  pilotWindow: string;
+};
+
+const caseTemplates: Record<string, CaseBrief> = {
+  "clean-broker-handover": {
+    accountName: "Northstar Components GmbH",
+    region: "EU outbound",
+    projectPhase: "Pre-implementation workshop",
+    consultantOwner: "AEB consulting team",
+    targetWorkstream: "Broker and customs handover",
+    pilotWindow: "2-week readiness sprint",
+  },
+  "invoice-packing-list-mismatch": {
+    accountName: "Helio Motion Systems",
+    region: "EU to UK",
+    projectPhase: "Data discovery",
+    consultantOwner: "Customs consultant",
+    targetWorkstream: "Customs broker integration",
+    pilotWindow: "10-day blocker cleanup",
+  },
+  "missing-end-use-statement": {
+    accountName: "Atlas Automation Export",
+    region: "EU to Turkey",
+    projectPhase: "Export-control preparation",
+    consultantOwner: "Trade compliance consultant",
+    targetWorkstream: "Export controls and risk",
+    pilotWindow: "1-week evidence sprint",
+  },
+  "missing-technical-data": {
+    accountName: "Sensorik Werke AG",
+    region: "Global shipments",
+    projectPhase: "Classification readiness",
+    consultantOwner: "Product classification lead",
+    targetWorkstream: "Classification and export controls",
+    pilotWindow: "2-week product data cleanup",
+  },
+  "weak-master-data": {
+    accountName: "Rhein Logistics Manufacturing",
+    region: "EU distribution",
+    projectPhase: "Master data assessment",
+    consultantOwner: "Implementation consultant",
+    targetWorkstream: "Master data and carrier connect",
+    pilotWindow: "30-day data readiness plan",
+  },
+};
+
+function getCaseTemplate(scenario: DemoScenario): CaseBrief {
+  return caseTemplates[scenario.id] ?? caseTemplates["clean-broker-handover"];
+}
 
 export default function Home() {
   const [selectedScenarioId, setSelectedScenarioId] = useState(demoScenarios[0].id);
@@ -63,6 +123,8 @@ export default function Home() {
     [selectedScenarioId],
   );
   const [notes, setNotes] = useState(selectedScenario.notes);
+  const [caseBrief, setCaseBrief] = useState<CaseBrief>(() => getCaseTemplate(demoScenarios[0]));
+  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [analysis, setAnalysis] = useState<ReadinessAnalysis>(() =>
     analyzeReadiness(selectedScenario.notes, selectedScenario),
   );
@@ -71,6 +133,7 @@ export default function Home() {
     const scenario = demoScenarios.find((item) => item.id === id) ?? demoScenarios[0];
     setSelectedScenarioId(scenario.id);
     setNotes(scenario.notes);
+    setCaseBrief(getCaseTemplate(scenario));
     setAnalysis(analyzeReadiness(scenario.notes, scenario));
   }
 
@@ -80,7 +143,27 @@ export default function Home() {
 
   function handleReset() {
     setNotes(selectedScenario.notes);
+    setCaseBrief(getCaseTemplate(selectedScenario));
     setAnalysis(analyzeReadiness(selectedScenario.notes, selectedScenario));
+  }
+
+  function handleCaseBriefChange(field: keyof CaseBrief, value: string) {
+    setCaseBrief((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handleCopyHandover() {
+    const customerNote = createCustomerReport(caseBrief, analysis);
+    try {
+      await navigator.clipboard.writeText(customerNote);
+    } catch {
+      copyTextFallback(customerNote);
+    }
+    setCopyState("copied");
+    window.setTimeout(() => setCopyState("idle"), 1800);
+  }
+
+  function handlePrintReport() {
+    window.print();
   }
 
   return (
@@ -91,6 +174,7 @@ export default function Home() {
         <aside className="rounded-[8px] border border-white/10 bg-[#071015] p-5 text-white shadow-[0_30px_90px_rgba(7,16,21,0.28)] lg:sticky lg:top-5 lg:h-[calc(100vh-40px)] lg:overflow-y-auto">
           <SidebarHeader />
           <ConsultantGraphic analysis={analysis} />
+          <CaseBriefForm caseBrief={caseBrief} onChange={handleCaseBriefChange} />
           <InputPanel
             selectedScenario={selectedScenario}
             selectedScenarioId={selectedScenarioId}
@@ -103,14 +187,23 @@ export default function Home() {
         </aside>
 
         <section className="min-w-0 space-y-5">
-          <Hero analysis={analysis} />
+          <Hero analysis={analysis} caseBrief={caseBrief} />
+          <ProductFlow analysis={analysis} />
           <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_380px]">
             <div className="min-w-0 space-y-5">
+              <CaseWorkspace caseBrief={caseBrief} analysis={analysis} />
               <ReadinessCockpit analysis={analysis} />
               <TargetWorkflowReadiness analysis={analysis} />
             </div>
             <div className="min-w-0 space-y-5">
               <MissingEvidence analysis={analysis} />
+              <ReportPreview
+                analysis={analysis}
+                caseBrief={caseBrief}
+                onCopy={handleCopyHandover}
+                onPrint={handlePrintReport}
+                copyState={copyState}
+              />
               <ConsultantHandover note={analysis.handoverNote} />
             </div>
           </div>
@@ -152,6 +245,70 @@ function SidebarHeader() {
         advice is claimed.
       </div>
     </div>
+  );
+}
+
+function CaseBriefForm({
+  caseBrief,
+  onChange,
+}: {
+  caseBrief: CaseBrief;
+  onChange: (field: keyof CaseBrief, value: string) => void;
+}) {
+  return (
+    <section className="mt-6 rounded-[8px] border border-white/10 bg-white/[0.055] p-4">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/42">
+        <BriefcaseBusiness className="h-4 w-4 text-teal-100/70" />
+        Customer case
+      </div>
+
+      <div className="mt-4 space-y-3">
+        <SidebarField
+          label="Customer"
+          value={caseBrief.accountName}
+          onChange={(value) => onChange("accountName", value)}
+        />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+          <SidebarField label="Region" value={caseBrief.region} onChange={(value) => onChange("region", value)} />
+          <SidebarField
+            label="Pilot window"
+            value={caseBrief.pilotWindow}
+            onChange={(value) => onChange("pilotWindow", value)}
+          />
+        </div>
+        <SidebarField
+          label="Project phase"
+          value={caseBrief.projectPhase}
+          onChange={(value) => onChange("projectPhase", value)}
+        />
+        <SidebarField
+          label="Target workstream"
+          value={caseBrief.targetWorkstream}
+          onChange={(value) => onChange("targetWorkstream", value)}
+        />
+      </div>
+    </section>
+  );
+}
+
+function SidebarField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/36">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 h-10 w-full rounded-[8px] border border-white/10 bg-[#050b10] px-3 text-sm font-medium text-white/84 outline-none transition focus:border-teal-200/60 focus:ring-2 focus:ring-teal-200/15"
+      />
+    </label>
   );
 }
 
@@ -227,19 +384,24 @@ function InputPanel({
   );
 }
 
-function Hero({ analysis }: { analysis: ReadinessAnalysis }) {
+function Hero({ analysis, caseBrief }: { analysis: ReadinessAnalysis; caseBrief: CaseBrief }) {
   return (
     <header className="rounded-[8px] border border-[#101820]/10 bg-[#f8faf6] p-5 shadow-[0_24px_70px_rgba(16,24,32,0.08)] sm:p-6">
       <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#61706c]">Pre-AEB readiness workbench</p>
           <h2 className="mt-4 text-4xl font-semibold leading-[0.98] tracking-normal text-[#101820] sm:text-5xl">
-            Consultant Toolkit
+            Customer readiness workspace
           </h2>
           <p className="mt-4 text-base leading-7 text-[#54615e]">
-            Turn a messy customer workshop into a structured data readiness conversation: facts, blockers, target
-            workflow preview and a handover note in one screen.
+            Prepare {caseBrief.accountName} for the next AEB project conversation with a customer case, mock readiness
+            check, target workflow preview and consultant handover output.
           </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <CaseTag label={caseBrief.projectPhase} />
+            <CaseTag label={caseBrief.targetWorkstream} />
+            <CaseTag label={caseBrief.pilotWindow} />
+          </div>
         </div>
         <div className="grid min-w-0 gap-3 sm:grid-cols-3 xl:grid-cols-1">
           <Metric label="Score" value={`${analysis.overallScore}`} />
@@ -248,6 +410,74 @@ function Hero({ analysis }: { analysis: ReadinessAnalysis }) {
         </div>
       </div>
     </header>
+  );
+}
+
+function ProductFlow({ analysis }: { analysis: ReadinessAnalysis }) {
+  const blockingCount = analysis.blockers.filter((item) => item.severity === "blocking").length;
+  const warningCount = analysis.blockers.filter((item) => item.severity === "warning").length;
+  const stages = [
+    { label: "Case", value: "Editable" },
+    { label: "Check", value: statusCopy[analysis.overallStatus] },
+    { label: "Report", value: `${blockingCount} blockers` },
+    { label: "Handover", value: `${warningCount} warnings` },
+  ];
+
+  return (
+    <section className="grid gap-3 rounded-[8px] border border-[#101820]/10 bg-white/78 p-3 shadow-[0_16px_50px_rgba(16,24,32,0.06)] sm:grid-cols-4">
+      {stages.map((stage, index) => (
+        <div key={stage.label} className="flex items-center gap-3 rounded-[8px] bg-[#f8faf6] p-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] border border-[#101820]/10 bg-white text-xs font-semibold text-[#101820]">
+            {index + 1}
+          </span>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[#101820]">{stage.label}</p>
+            <p className="truncate text-xs font-medium text-[#75817e]">{stage.value}</p>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+function CaseWorkspace({ caseBrief, analysis }: { caseBrief: CaseBrief; analysis: ReadinessAnalysis }) {
+  const readyTargets = analysis.targetReadiness.filter((item) => item.status === "ready").length;
+  const blockedTargets = analysis.targetReadiness.filter((item) => item.status === "blocked").length;
+
+  return (
+    <Panel>
+      <SectionHeading
+        icon={<BriefcaseBusiness className="h-4 w-4" />}
+        kicker="Customer case"
+        title={caseBrief.accountName}
+        description="A lightweight case record for the readiness workshop. In a real V1 this becomes the saved project object."
+      />
+
+      <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CaseDatum label="Region" value={caseBrief.region} />
+        <CaseDatum label="Phase" value={caseBrief.projectPhase} />
+        <CaseDatum label="Owner" value={caseBrief.consultantOwner} />
+        <CaseDatum label="Window" value={caseBrief.pilotWindow} />
+      </div>
+
+      <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_220px]">
+        <div className="rounded-[8px] border border-[#101820]/10 bg-[#fbfcf9] p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#75817e]">Target workstream</p>
+          <p className="mt-2 text-lg font-semibold leading-6 text-[#101820]">{caseBrief.targetWorkstream}</p>
+          <p className="mt-2 text-sm leading-6 text-[#54615e]">
+            The tool turns workshop notes into a structured readiness view. It still does not provide legal, customs,
+            sanctions or export-control advice.
+          </p>
+        </div>
+        <div className="rounded-[8px] border border-[#101820]/10 bg-[#101820] p-4 text-white">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/46">Workflow health</p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <MiniStat label="Ready" value={readyTargets.toString()} />
+            <MiniStat label="Blocked" value={blockedTargets.toString()} />
+          </div>
+        </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -385,6 +615,87 @@ function MissingEvidence({ analysis }: { analysis: ReadinessAnalysis }) {
   );
 }
 
+function ReportPreview({
+  analysis,
+  caseBrief,
+  onCopy,
+  onPrint,
+  copyState,
+}: {
+  analysis: ReadinessAnalysis;
+  caseBrief: CaseBrief;
+  onCopy: () => void;
+  onPrint: () => void;
+  copyState: "idle" | "copied";
+}) {
+  const blockingCount = analysis.blockers.filter((item) => item.severity === "blocking").length;
+  const warningCount = analysis.blockers.filter((item) => item.severity === "warning").length;
+  const nextActions =
+    analysis.blockers.length > 0
+      ? analysis.blockers.slice(0, 3).map((item) => item.suggestedFix)
+      : ["Proceed with the next implementation workshop using the current evidence package."];
+
+  return (
+    <Panel className="print-panel">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <SectionHeading
+          icon={<ClipboardCheck className="h-4 w-4" />}
+          kicker="Report preview"
+          title="Customer-ready summary"
+          description="A simple preview of what the consultant can share after the readiness conversation."
+        />
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onCopy}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-[8px] border border-[#101820]/10 bg-[#f8faf6] px-3 text-xs font-semibold text-[#101820] transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-teal-200/40"
+          >
+            <Copy className="h-4 w-4" />
+            {copyState === "copied" ? "Copied" : "Copy"}
+          </button>
+          <button
+            type="button"
+            onClick={onPrint}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-[8px] bg-[#101820] px-3 text-xs font-semibold text-white transition hover:bg-[#25313a] focus:outline-none focus:ring-2 focus:ring-[#101820]/20"
+          >
+            <Printer className="h-4 w-4" />
+            Print
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-[8px] border border-[#101820]/10 bg-[#fbfcf9] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#101820]/10 pb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#75817e]">Pilot report</p>
+            <h3 className="mt-2 text-xl font-semibold leading-tight text-[#101820]">{caseBrief.accountName}</h3>
+            <p className="mt-1 text-sm text-[#54615e]">{caseBrief.targetWorkstream}</p>
+          </div>
+          <StatusBadge status={analysis.overallStatus} label={statusCopy[analysis.overallStatus]} />
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <ReportMetric label="Score" value={`${analysis.overallScore}/100`} />
+          <ReportMetric label="Blocking" value={blockingCount.toString()} />
+          <ReportMetric label="Warnings" value={warningCount.toString()} />
+        </div>
+
+        <div className="mt-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#75817e]">Next customer actions</p>
+          <ul className="mt-3 space-y-2">
+            {nextActions.map((action) => (
+              <li key={action} className="flex gap-2 text-sm leading-6 text-[#34403d]">
+                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />
+                <span>{action}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 function ConsultantHandover({ note }: { note: string }) {
   return (
     <Panel>
@@ -517,6 +828,41 @@ function StatusBadge({ status, label }: { status: ReadinessStatus; label: string
   );
 }
 
+function CaseTag({ label }: { label: string }) {
+  return (
+    <span className="rounded-[6px] border border-[#101820]/10 bg-white px-3 py-1.5 text-xs font-semibold text-[#34403d]">
+      {label}
+    </span>
+  );
+}
+
+function CaseDatum({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[8px] border border-[#101820]/10 bg-[#fbfcf9] p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#75817e]">{label}</p>
+      <p className="mt-2 text-sm font-semibold leading-5 text-[#101820]">{value}</p>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-3xl font-semibold leading-none text-white">{value}</p>
+      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-white/48">{label}</p>
+    </div>
+  );
+}
+
+function ReportMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[8px] border border-[#101820]/10 bg-white p-3">
+      <p className="text-lg font-semibold text-[#101820]">{value}</p>
+      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#75817e]">{label}</p>
+    </div>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-[120px] rounded-[8px] border border-[#101820]/10 bg-white p-4">
@@ -533,4 +879,44 @@ function FactCard({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm font-semibold text-[#101820]">{value}</p>
     </div>
   );
+}
+
+function createCustomerReport(caseBrief: CaseBrief, analysis: ReadinessAnalysis) {
+  const blockers =
+    analysis.blockers.length > 0
+      ? analysis.blockers
+          .map((item, index) => `${index + 1}. ${item.title}: ${item.suggestedFix}`)
+          .join("\n")
+      : "No blocking customer to-dos were detected in this mock readiness check.";
+
+  return [
+    `Customer: ${caseBrief.accountName}`,
+    `Region: ${caseBrief.region}`,
+    `Project phase: ${caseBrief.projectPhase}`,
+    `Target workstream: ${caseBrief.targetWorkstream}`,
+    `Readiness score: ${analysis.overallScore}/100 (${statusCopy[analysis.overallStatus]})`,
+    "",
+    "Executive summary:",
+    analysis.executiveSummary,
+    "",
+    "Customer next actions:",
+    blockers,
+    "",
+    "Generated handover note:",
+    analysis.handoverNote,
+    "",
+    "Disclaimer: This is a mock readiness check. It does not provide legal, customs, sanctions or export-control advice.",
+  ].join("\n");
+}
+
+function copyTextFallback(text: string) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
 }
